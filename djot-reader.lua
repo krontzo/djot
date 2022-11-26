@@ -5,6 +5,7 @@ local insert_attribute, copy_attributes =
 local emoji -- require this later, only if emoji encountered
 local format = string.format
 local find, gsub = string.find, string.gsub
+local debug = false or tonumber(os.getenv('DEBUG'))
 
 -- Produce a copy of a table.
 local function copy(tbl)
@@ -21,14 +22,33 @@ local function copy(tbl)
   return result
 end
 
+local function log(node, prefix)
+  if not debug then return end
+  if node == nil then
+      print('WARNING: nil')
+      return
+  end
+  if not prefix then prefix = ' >' end
+  if type(node) == 'str' then
+      print(prefix..node)
+  elseif type(node) == 'table' then
+      for k,v in pairs(node) do
+          print(' >', k, v, type(v))
+      end
+  end
+end
+
 local function to_text(node)
   local buffer = {}
-  if node[1] == "str" then
-    buffer[#buffer + 1] = node[2]
-  elseif node[1] == "softbreak" then
+  log('here@to_text')
+  log(node)
+  log('---')
+  if node.tag == "str" then
+    buffer[#buffer + 1] = node.text
+  elseif node.tag == "softbreak" then
     buffer[#buffer + 1] = " "
-  elseif #node > 1 then
-    for i=2,#node do
+  elseif #node >= 1 then
+    for i=1,#node do
       buffer[#buffer + 1] = to_text(node[i])
     end
   end
@@ -77,14 +97,19 @@ end
 
 function Renderer:render_children(node)
   local buff = {}
-  if #node > 1 then
+  log('here@render_children')
+  local node = node.children
+  log({node, type(node), node.tag, #node})
+  log(node)
+  if #node >= 1 then
     local oldtight
     if node.tight ~= nil then
       oldtight = self.tight
       self.tight = node.tight
     end
-    for i=2,#node do
-      local elt = self[node[i][1]](self, node[i])
+    for i=1,#node do
+      log(node[i])
+      local elt = self[node[i].tag](self, node[i])
       if elt.__name == "Inlines" or elt.__name == "Blocks" then
         for i=1,#elt do
           buff[#buff + 1] = elt[i]
@@ -103,7 +128,7 @@ end
 function Renderer:render(doc)
   self.footnotes = doc.footnotes
   self.references = doc.references
-  return self[doc[1]](self, doc)
+  return self[doc.tag](self, doc)
 end
 
 function Renderer:doc(node)
@@ -143,13 +168,15 @@ function Renderer:thematic_break(node)
 end
 
 function Renderer:code_block(node)
+  log('here@code_block')
+  log(node)
   local attr = copy(to_attr(node.attr))
   if not attr.class then
     attr.class = node.lang
   else
     attr.class = node.lang .. " " .. attr.class
   end
-  return pandoc.CodeBlock(to_text(node):gsub("\n$",""), attr)
+  return pandoc.CodeBlock(node.text:gsub("\n$",""), attr)
 end
 
 function Renderer:table(node)
@@ -280,15 +307,15 @@ function Renderer:footnote_reference(node)
 end
 
 function Renderer:raw_inline(node)
-  return pandoc.RawInline(node.format, node[2])
+  return pandoc.RawInline(node.format, node.text)
 end
 
 function Renderer:str(node)
   -- add a span, if needed, to contain attribute on a bare string:
   if node.attr then
-    return pandoc.Span(pandoc.Inlines(node[2]), to_attr(node.attr))
+    return pandoc.Span(pandoc.Inlines(node.text), to_attr(node.attr))
   else
-    return pandoc.Inlines(node[2])
+    return pandoc.Inlines(node.text)
   end
 end
 
@@ -305,7 +332,9 @@ function Renderer:nbsp()
 end
 
 function Renderer:verbatim(node)
-  return pandoc.Code(to_text(node), to_attr(node.attr))
+  log('here@verb')
+  log(node)
+  return pandoc.Code(node.text, to_attr(node.attr))
 end
 
 function Renderer:link(node)
@@ -433,12 +462,11 @@ function Renderer:en_dash()
 end
 
 function Renderer:emoji(node)
-  emoji = require("djot.emoji")
-  local found = emoji[node[2]:sub(2,-2)]
+  local found = node.text
   if found then
     return found
   else
-    return node[2]
+    return ':'..node.alias..':'
   end
 end
 
@@ -447,12 +475,10 @@ function Renderer:math(node)
   if find(node.attr.class, "display") then
     math_type = "DisplayMath"
   end
-  return pandoc.Math(math_type, to_text(node))
+  return pandoc.Math(math_type, to_text(node.children))
 end
 
 function Reader(input)
-  local parser = djot.Parser:new(tostring(input))
-  parser:parse()
-  parser:build_ast()
-  return Renderer:render(parser.ast)
+  local doc = djot.parse(tostring(input), true)
+  return Renderer:render(doc.ast)
 end
