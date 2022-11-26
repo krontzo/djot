@@ -41,7 +41,7 @@ syn match footnoteref '\[\^[^]]*\]'
 syn match openbrace /[{]["']/he=e-1
 syn match closebrace /["'][}]/hs=s+1
 
-syn match emoji ':[a-zA-Z0-9_+-]\+:'
+syn match emoji ':[a-zA-Z0-9_+-][a-zA-Z0-9_]\+:'
 
 syn match escape '\\[\r\n ~!@#$%^&*(){}`\[\]/=\\?+|\'",<-]'he=e-1
 
