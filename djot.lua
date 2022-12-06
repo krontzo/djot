@@ -1,4 +1,31 @@
 --- @module djot
+--- Parse and render djot light markup format. See https://djot.net.
+---
+--- @usage
+--- local djot = require("djot")
+--- local input = "This is *djot*"
+--- local doc = djot.parse(input)
+--- -- render as HTML:
+--- print(djot.render_html(doc))
+---
+--- -- render as AST:
+--- print(djot.render_ast_pretty(doc))
+---
+--- -- or in JSON:
+--- print(djot.render_ast_json(doc))
+---
+--- -- alter the AST with a filter:
+--- local src = "return { str = function(e) e.text = e.text:upper() end }"
+--- -- subordinate modules like filter can be accessed as fields
+--- -- and are lazily loaded.
+--- local filter = djot.filter.load_filter(src)
+--- djot.filter.apply_filter(doc, filter)
+---
+--- -- streaming parser:
+--- for startpos, endpos, annotation in djot.parse_events("*hello there*") do
+---   print(startpos, endpos, annotation)
+--- end
+
 local unpack = unpack or table.unpack
 local Parser = require("djot.block").Parser
 local ast = require("djot.ast")
@@ -106,6 +133,9 @@ local function parse_and_render_events(input, warn)
   return handle:flush()
 end
 
+--- djot version (string)
+local version = "0.2.0"
+
 --- @export
 local G = {
   parse = parse,
@@ -115,7 +145,7 @@ local G = {
   render_ast_pretty = render_ast_pretty,
   render_ast_json = render_ast_json,
   render_event = render_event,
-  version = "0.2.0"
+  version = version
 }
 
 -- Lazily load submodules, e.g. djot.filter
