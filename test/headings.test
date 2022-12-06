@@ -1,15 +1,32 @@
 ```
 ## Heading
 .
-<h2 id="Heading">Heading</h2>
+<section id="Heading">
+<h2>Heading</h2>
+</section>
 ```
 
 ```
 # Heading
+
 # another
 .
-<h1 id="Heading">Heading</h1>
-<h1 id="another">another</h1>
+<section id="Heading">
+<h1>Heading</h1>
+</section>
+<section id="another">
+<h1>another</h1>
+</section>
+```
+
+```
+# Heading
+# continued
+.
+<section id="Heading-continued">
+<h1>Heading
+continued</h1>
+</section>
 ```
 
 ```
@@ -18,30 +35,57 @@ heading
 
 para
 .
-<h2 id="heading">heading</h2>
+<section id="heading">
+<h2>heading</h2>
 <p>para</p>
+</section>
 ```
 
 ```
 ##
 .
-<h2 id=""></h2>
+<section id="">
+<h2></h2>
+</section>
 ```
 
 ```
 ## Heading
 ### Next level
 .
-<h2 id="Heading">Heading</h2>
-<h3 id="Next-level">Next level</h3>
+<section id="Heading">
+<h2>Heading</h2>
+<section id="Next-level">
+<h3>Next level</h3>
+</section>
+</section>
 ```
 
 ```
 # Heading
 lazy
 .
-<h1 id="Heading-lazy">Heading
+<section id="Heading-lazy">
+<h1>Heading
 lazy</h1>
+</section>
+```
+
+```
+# Heading
+lazy
+# more
+lazy
+
+text
+.
+<section id="Heading-lazy-more-lazy">
+<h1>Heading
+lazy
+more
+lazy</h1>
+<p>text</p>
+</section>
 ```
 
 ```
@@ -53,19 +97,25 @@ lazy</h1>
 ```
    ##    Heading
 .
-<h2 id="Heading">Heading</h2>
+<section id="Heading">
+<h2>Heading</h2>
+</section>
 ```
 
 ```
 ## heading ##
 .
-<h2 id="heading">heading</h2>
+<section id="heading">
+<h2>heading ##</h2>
+</section>
 ```
 
 ```
-## heading \##
+# # heading
 .
-<h2 id="heading">heading ##</h2>
+<section id="heading">
+<h1># heading</h1>
+</section>
 ```
 
 Auto-identifiers:
@@ -82,9 +132,15 @@ Paragraph
 # Foo bar
 .
 <p id="Foo-bar">Paragraph</p>
-<h1 id="Foo-bar1">Foo bar</h1>
-<h2 id="Foo-bar2">Foo  bar</h2>
-<h1 id="baz">Foo bar</h1>
+<section id="Foo-bar1">
+<h1>Foo bar</h1>
+<section id="Foo-bar2">
+<h2>Foo  bar</h2>
+</section>
+</section>
+<section id="baz">
+<h1>Foo bar</h1>
+</section>
 ```
 
 Implicit header references:
@@ -95,7 +151,9 @@ See [Introduction][].
 # Introduction
 .
 <p>See <a href="#Introduction">Introduction</a>.</p>
-<h1 id="Introduction">Introduction</h1>
+<section id="Introduction">
+<h1>Introduction</h1>
+</section>
 ```
 
 ```
@@ -105,7 +163,9 @@ See [Introduction][].
 # Introduction
 .
 <p>See <a href="#foo">Introduction</a>.</p>
-<h1 id="foo">Introduction</h1>
+<section id="foo">
+<h1>Introduction</h1>
+</section>
 ```
 
 ```
@@ -116,5 +176,7 @@ See [Introduction][].
 [Introduction]: #bar
 .
 <p>See <a href="#bar">Introduction</a>.</p>
-<h1 id="Introduction">Introduction</h1>
+<section id="Introduction">
+<h1>Introduction</h1>
+</section>
 ```

@@ -34,14 +34,16 @@ a *b{#id key="*"}o
 <p>a <span id="id" key="*">*b</span>o</p>
 ```
 
-Don't allow attributes to start when we're parsing a potential
-attribute.
+Don't mind braces in quotes:
 
 ```
 hi{key="{#hi"}
 .
-<p>hi{key=&ldquo;{#hi&rdquo;</p>
+<p><span key="{#hi">hi</span></p>
 ```
+
+Don't allow attributes to start when we're parsing a potential
+attribute.
 
 ```
 hi\{key="abc{#hi}"
@@ -61,7 +63,7 @@ Line break:
 hi{#id .class
 key="value"}
 .
-<p><span id="id" class="class" key="value">hi</span></p>
+<p><span class="class" id="id" key="value">hi</span></p>
 ```
 
 Here there is nothing for the attribute to attach to:
@@ -86,7 +88,7 @@ Block attributes come before the block, on a line by themselves.
 {#id .class}
 A paragraph
 .
-<p id="id" class="class">A paragraph</p>
+<p class="class" id="id">A paragraph</p>
 ```
 
 Use indentation if you need to continue the attributes over a line break.
@@ -96,7 +98,7 @@ Use indentation if you need to continue the attributes over a line break.
   style="color:red"}
 A paragraph
 .
-<p id="id" class="class" style="color:red">A paragraph</p>
+<p class="class" id="id" style="color:red">A paragraph</p>
 ```
 
 If the attribute block can't be parsed as attributes, it will be
@@ -121,7 +123,7 @@ but classes accumulate:
 {#id2}
 Okay
 .
-<p id="id2" key="val2" class="foo bar baz">Okay</p>
+<p class="foo bar baz" id="id2" key="val2">Okay</p>
 ```
 
 Attributes on different kinds of blocks:
@@ -139,7 +141,9 @@ Attributes on different kinds of blocks:
 {#id}
 # Heading
 .
-<h1 id="id">Heading</h1>
+<section id="id">
+<h1>Heading</h1>
+</section>
 ```
 
 ```
@@ -194,7 +198,7 @@ list or without any real attributes.
 ```
 foo{#ident % this is a comment % .class}
 .
-<p><span id="ident" class="class">foo</span></p>
+<p><span class="class" id="ident">foo</span></p>
 ```
 
 In block-level comment, subsequent lines must
@@ -206,4 +210,56 @@ be indented, as with attributes:
 Paragraph.
 .
 <p>Paragraph.</p>
+```
+
+Inline attributes can be empty:
+
+```
+hi{}
+.
+<p>hi</p>
+```
+
+Block attributes can be empty:
+
+```
+{}
+hi
+.
+<p>hi</p>
+```
+
+Non-attributes:
+
+```
+text{a=x
+
+hello
+.
+<p>text{a=x</p>
+<p>hello</p>
+```
+
+```
+{a=x
+hello
+.
+<p>{a=x
+hello</p>
+```
+
+```
+text{a=x
+# non-heading
+.
+<p>text{a=x
+# non-heading</p>
+```
+
+```
+{a=x
+# non-heading
+.
+<p>{a=x
+# non-heading</p>
 ```

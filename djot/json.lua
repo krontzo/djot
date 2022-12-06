@@ -23,15 +23,10 @@
 -- Modifications to the original code:
 --
 -- * Removed JSON decoding code
--- * Add code to ignore keys beginning with '_'
--- * Revise short names used in internal AST to longer descriptive names,
---   e.g. c -> children.
 
 local json = { _version = "0.1.2" }
 
--------------------------------------------------------------------------------
 -- Encode
--------------------------------------------------------------------------------
 
 local encode
 
@@ -59,11 +54,6 @@ end
 local function encode_nil(val)
   return "null"
 end
-
-local longnames =
-  { c = "children",
-    t = "tag",
-    s = "text" }
 
 local function encode_table(val, stack)
   local res = {}
@@ -99,11 +89,7 @@ local function encode_table(val, stack)
       if type(k) ~= "string" then
         error("invalid table: mixed or invalid key types")
       end
-      -- Added by JGM:
-      if string.sub(k,1,1) ~= "_" then
-        local key = longnames[k] or k
-        table.insert(res, encode(key, stack) .. ":" .. encode(v, stack))
-      end
+      table.insert(res, encode(k, stack) .. ":" .. encode(v, stack))
     end
     stack[val] = nil
     return "{" .. table.concat(res, ",") .. "}"

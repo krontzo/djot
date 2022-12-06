@@ -1,9 +1,6 @@
 -- this allows the code to work with both lua and luajit:
 local unpack = unpack or table.unpack
-local match = require("djot.match")
 local attributes = require("djot.attributes")
-local make_match, unpack_match, matches_pattern =
-  match.make_match, match.unpack_match, match.matches_pattern
 local find, byte = string.find, string.byte
 
 -- allow up to 3 captures...
@@ -23,12 +20,11 @@ end
 -- opener. We can then change the annotation of the match at
 -- that location to '+emphasis' or whatever.
 
-local Parser = {}
+local InlineParser = {}
 
-function Parser:new(subject, opts, warn)
+function InlineParser:new(subject, warn)
   local state =
-    { opts = opts or {}, -- options
-      warn = warn or function() end, -- function to issue warnings
+    { warn = warn or function() end, -- function to issue warnings
       subject = subject, -- text to parse
       matches = {}, -- table pos : (endpos, annotation)
       openers = {}, -- map from closer_type to array of (pos, data) in reverse order
@@ -47,11 +43,11 @@ function Parser:new(subject, opts, warn)
   return state
 end
 
-function Parser:add_match(startpos, endpos, annotation)
-  self.matches[startpos] = make_match(startpos, endpos, annotation)
+function InlineParser:add_match(startpos, endpos, annotation)
+  self.matches[startpos] = {startpos, endpos, annotation}
 end
 
-function Parser:add_opener(name, ...)
+function InlineParser:add_opener(name, ...)
   -- 1 = startpos, 2 = endpos, 3 = annotation, 4 = substartpos, 5 = endpos
   --
   -- [link text](url)
@@ -64,7 +60,7 @@ function Parser:add_opener(name, ...)
   table.insert(self.openers[name], {...})
 end
 
-function Parser:clear_openers(startpos, endpos)
+function InlineParser:clear_openers(startpos, endpos)
   -- remove other openers in between the matches
   for _,v in pairs(self.openers) do
     local i = #v
@@ -84,26 +80,34 @@ function Parser:clear_openers(startpos, endpos)
   end
 end
 
-function Parser:str_matches(startpos, endpos)
+function InlineParser:str_matches(startpos, endpos)
   for i = startpos, endpos do
     local m = self.matches[i]
     if m then
-      local sp, ep, annot = unpack_match(m)
+      local sp, ep, annot = unpack(m)
       if annot ~= "str" and annot ~= "escape" then
-        self.matches[i] = make_match(sp, ep, "str")
+        self.matches[i] = {sp, ep, "str"}
       end
     end
   end
 end
 
-function Parser.between_matched(c, annotation, defaultmatch, opentest)
-  return function(self, pos)
-    local defaultmatch = defaultmatch or "str"
+local function matches_pattern(match, patt)
+  if match then
+    return string.find(match[3], patt)
+  end
+end
+
+
+function InlineParser.between_matched(c, annotation, defaultmatch, opentest)
+  return function(self, pos, endpos)
+    defaultmatch = defaultmatch or "str"
     local subject = self.subject
     local can_open = find(subject, "^%S", pos + 1)
     local can_close = find(subject, "^%S", pos - 1)
     local has_open_marker = matches_pattern(self.matches[pos - 1], "^open%_marker")
-    local has_close_marker = byte(subject, pos + 1) == 125 -- }
+    local has_close_marker = pos + 1 <= endpos and
+                              byte(subject, pos + 1) == 125 -- }
     local endcloser = pos
     local startopener = pos
 
@@ -129,7 +133,13 @@ function Parser.between_matched(c, annotation, defaultmatch, opentest)
       defaultmatch = defaultmatch:gsub("^left", "right")
     end
 
-    local openers = self.openers[c]
+    local d
+    if has_close_marker then
+      d = "{" .. c
+    else
+      d = c
+    end
+    local openers = self.openers[d]
     if can_close and openers and #openers > 0 then
        -- check openers for a match
       local openpos, openposend = unpack(openers[#openers])
@@ -140,9 +150,15 @@ function Parser.between_matched(c, annotation, defaultmatch, opentest)
         return endcloser + 1
       end
     end
+
     -- if we get here, we didn't match an opener
     if can_open then
-      self:add_opener(c, startopener, pos)
+      if has_open_marker then
+        d = "{" .. c
+      else
+        d = c
+      end
+      self:add_opener(d, startopener, pos)
       self:add_match(startopener, pos, defaultmatch)
       return pos + 1
     else
@@ -152,7 +168,7 @@ function Parser.between_matched(c, annotation, defaultmatch, opentest)
   end
 end
 
-Parser.matchers = {
+InlineParser.matchers = {
     -- 96 = `
     [96] = function(self, pos, endpos)
       local subject = self.subject
@@ -160,7 +176,8 @@ Parser.matchers = {
       if not endchar then
         return nil
       end
-      if find(subject, "^%$%$", pos - 2) then
+      if find(subject, "^%$%$", pos - 2) and
+          not find(subject, "^\\", pos - 3) then
         self.matches[pos - 2] = nil
         self.matches[pos - 1] = nil
         self:add_match(pos - 2, endchar, "+display_math")
@@ -185,7 +202,7 @@ Parser.matchers = {
       if endchar then
         -- see if there were preceding spaces
         if #self.matches > 0 then
-          local sp, ep, annot = unpack_match(self.matches[#self.matches])
+          local sp, ep, annot = unpack(self.matches[#self.matches])
           if annot == "str" then
             while subject:byte(ep) == 32 or subject:byte(ep) == 9 do
               ep = ep -1
@@ -239,10 +256,10 @@ Parser.matchers = {
     end,
 
     -- 126 = ~
-    [126] = Parser.between_matched('~', 'subscript'),
+    [126] = InlineParser.between_matched('~', 'subscript'),
 
     -- 94 = ^
-    [94] = Parser.between_matched('^', 'superscript'),
+    [94] = InlineParser.between_matched('^', 'superscript'),
 
     -- 91 = [
     [91] = function(self, pos, endpos)
@@ -288,6 +305,8 @@ Parser.matchers = {
           opener[4] = pos  -- intermediate ]
           opener[5] = pos + 1  -- intermediate [
           self:add_match(pos, pos + 1, "str")
+          -- remove any openers between [ and ]
+          self:clear_openers(opener[1] + 1, pos - 1)
           return pos + 2
         elseif bounded_find(subject, "^%(", pos + 1, endpos) then
           self.openers["("] = {} -- clear ( openers
@@ -296,11 +315,14 @@ Parser.matchers = {
           opener[5] = pos + 1  -- intermediate (
           self.destination = true
           self:add_match(pos, pos + 1, "str")
+          -- remove any openers between [ and ]
+          self:clear_openers(opener[1] + 1, pos - 1)
           return pos + 2
         elseif bounded_find(subject, "^%{", pos + 1, endpos) then
           -- assume this is attributes, bracketed span
           self:add_match(opener[1], opener[2], "+span")
           self:add_match(pos, pos, "-span")
+          -- remove any openers between [ and ]
           self:clear_openers(opener[1], pos)
           return pos + 1
         end
@@ -354,10 +376,10 @@ Parser.matchers = {
     end,
 
     -- 95 = _
-    [95] = Parser.between_matched('_', 'emph'),
+    [95] = InlineParser.between_matched('_', 'emph'),
 
     -- 42 = *
-    [42] = Parser.between_matched('*', 'strong'),
+    [42] = InlineParser.between_matched('*', 'strong'),
 
     -- 123 = {
     [123] = function(self, pos, endpos)
@@ -388,44 +410,54 @@ Parser.matchers = {
     end,
 
     -- 43 = +
-    [43] = Parser.between_matched("+", "insert", "str",
+    [43] = InlineParser.between_matched("+", "insert", "str",
                            function(self, pos)
                              return find(self.subject, "^%{", pos - 1) or
                                     find(self.subject, "^%}", pos + 1)
                            end),
 
     -- 61 = =
-    [61] = Parser.between_matched("=", "mark", "str",
+    [61] = InlineParser.between_matched("=", "mark", "str",
                            function(self, pos)
                              return find(self.subject, "^%{", pos - 1) or
                                     find(self.subject, "^%}", pos + 1)
                            end),
 
     -- 39 = '
-    [39] = Parser.between_matched("'", "single_quoted", "right_single_quote",
+    [39] = InlineParser.between_matched("'", "single_quoted", "right_single_quote",
                            function(self, pos) -- test to open
                              return pos == 1 or
                                find(self.subject, "^[%s\"'-([]", pos - 1)
                              end),
 
     -- 34 = "
-    [34] = Parser.between_matched('"', "double_quoted", "left_double_quote"),
+    [34] = InlineParser.between_matched('"', "double_quoted", "left_double_quote"),
 
     -- 45 = -
     [45] = function(self, pos, endpos)
       local subject = self.subject
-      local _, ep = find(subject, "^%-*", pos)
-      local hyphens
-      if endpos < ep then
-        hyphens = 1 + endpos - pos
-      else
-        hyphens = 1 + ep - pos
+      local nextpos
+      if byte(subject, pos - 1) == 123 or
+         byte(subject, pos + 1) == 125 then -- (123 = { 125 = })
+        nextpos = InlineParser.between_matched("-", "delete", "str",
+                           function(slf, p)
+                             return find(slf.subject, "^%{", p - 1) or
+                                    find(slf.subject, "^%}", p + 1)
+                           end)(self, pos, endpos)
+        return nextpos
       end
-      if byte(subject, ep + 1) == 125 then -- }
+      -- didn't match a del, try for smart hyphens:
+      local _, ep = find(subject, "^%-*", pos)
+      if endpos < ep then
+        ep = endpos
+      end
+      local hyphens = 1 + ep - pos
+      if byte(subject, ep + 1) == 125 then -- 125 = }
         hyphens = hyphens - 1 -- last hyphen is close del
       end
-      if byte(subject, pos - 1) == 123 or byte(subject, pos + 1) == 125 then
-        return Parser.between_matched("-", "delete")(self, pos, endpos)
+      if hyphens == 0 then  -- this means we have '-}'
+        self:add_match(pos, pos + 1, "str")
+        return pos + 2
       end
       -- Try to construct a homogeneous sequence of dashes
       local all_em = hyphens % 3 == 0
@@ -465,13 +497,31 @@ Parser.matchers = {
     end
   }
 
-function Parser:single_char(pos)
+function InlineParser:single_char(pos)
   self:add_match(pos, pos, "str")
   return pos + 1
 end
 
+-- Reparse attribute_slices that we tried to parse as an attribute
+function InlineParser:reparse_attributes()
+  local slices = self.attribute_slices
+  if not slices then
+    return
+  end
+  self.allow_attributes = false
+  self.attribute_parser = nil
+  self.attribute_start = nil
+  if slices then
+    for i=1,#slices do
+      self:feed(unpack(slices[i]))
+    end
+  end
+  self.allow_attributes = true
+  self.slices = nil
+end
+
 -- Feed a slice to the parser, updating state.
-function Parser:feed(spos, endpos)
+function InlineParser:feed(spos, endpos)
   local special = "[][\\`{}_*()!<>~^:=+$\r\n'\".-]"
   local subject = self.subject
   local matchers = self.matchers
@@ -486,7 +536,10 @@ function Parser:feed(spos, endpos)
   while pos <= endpos do
     if self.attribute_parser then
       local sp = pos
-      local ep2 = bounded_find(subject, special, pos, endpos) or endpos
+      local ep2 = bounded_find(subject, special, pos, endpos)
+      if not ep2 or ep2 > endpos then
+        ep2 = endpos
+      end
       local status, ep = self.attribute_parser:feed(sp, ep2)
       if status == "done" then
         local attribute_start = self.attribute_start
@@ -496,7 +549,7 @@ function Parser:feed(spos, endpos)
         local attr_matches = self.attribute_parser:get_matches()
         -- add attribute matches
         for i=1,#attr_matches do
-          self:add_match(unpack_match(attr_matches[i]))
+          self:add_match(unpack(attr_matches[i]))
         end
         -- restore state to prior to adding attribute parser:
         self.attribute_parser = nil
@@ -504,18 +557,13 @@ function Parser:feed(spos, endpos)
         self.attribute_slices = nil
         pos = ep + 1
       elseif status == "fail" then
-        -- backtrack:
-        local slices = self.attribute_slices
-        self.allow_attributes = false
-        self.attribute_parser = nil
-        self.attribute_start = nil
-        for i=1,#slices do
-          self:feed(unpack(slices[i]))
-        end
-        self.allow_attributes = true
-        self.slices = nil
-        pos = sp
+        self:reparse_attributes()
+        pos = sp  -- we'll want to go over the whole failed portion again,
+                  -- as no slice was added for it
       elseif status == "continue" then
+        if #self.attribute_slices == 0 then
+          self.attribute_slices = {}
+        end
         self.attribute_slices[#self.attribute_slices + 1] = {sp,ep}
         pos = ep + 1
       end
@@ -568,28 +616,31 @@ function Parser:feed(spos, endpos)
           pos = pos + 1
         end
       else
-        pos = (matchers[c] and matchers[c](self, pos, endpos))
-               or self:single_char(pos)
+        local matcher = matchers[c]
+        pos = (matcher and matcher(self, pos, endpos)) or self:single_char(pos)
       end
     end
   end
 end
 
   -- Return true if we're parsing verbatim content.
-function Parser:in_verbatim()
+function InlineParser:in_verbatim()
   return self.verbatim > 0
 end
 
-function Parser:get_matches()
+function InlineParser:get_matches()
   local sorted = {}
   local subject = self.subject
   local lastsp, lastep, lastannot
+  if self.attribute_parser then -- we're still in an attribute parse
+    self:reparse_attributes()
+  end
   for i=self.firstpos, self.lastpos do
     if self.matches[i] then
-      local sp, ep, annot = unpack_match(self.matches[i])
+      local sp, ep, annot = unpack(self.matches[i])
       if annot == "str" and lastannot == "str" and lastep + 1 == sp then
           -- consolidate adjacent strs
-        sorted[#sorted] = make_match(lastsp, ep, annot)
+        sorted[#sorted] = {lastsp, ep, annot}
         lastsp, lastep, lastannot = lastsp, ep, annot
       else
         sorted[#sorted + 1] = self.matches[i]
@@ -599,27 +650,29 @@ function Parser:get_matches()
   end
   if #sorted > 0 then
     local last = sorted[#sorted]
-    local startpos, endpos, annot = unpack_match(last)
+    local startpos, endpos, annot = unpack(last)
     -- remove final softbreak
     if annot == "softbreak" then
       sorted[#sorted] = nil
       last = sorted[#sorted]
-      startpos, endpos, annot = unpack_match(last)
+      if not last then
+        return sorted
+      end
+      startpos, endpos, annot = unpack(last)
     end
     -- remove trailing spaces
     if annot == "str" and byte(subject, endpos) == 32 then
       while endpos > startpos and byte(subject, endpos) == 32 do
         endpos = endpos - 1
       end
-      sorted[#sorted] = make_match(startpos, endpos, annot)
+      sorted[#sorted] = {startpos, endpos, annot}
     end
     if self.verbatim > 0 then -- unclosed verbatim
-      self.warn({ message = "Unclosed verbatim", pos = startpos })
-      sorted[#sorted + 1] = make_match(startpos, endpos,
-                                       "-" .. self.verbatim_type)
+      self.warn({ message = "Unclosed verbatim", pos = endpos })
+      sorted[#sorted + 1] = {endpos, endpos, "-" .. self.verbatim_type}
     end
   end
   return sorted
 end
 
-return { Parser = Parser }
+return { InlineParser = InlineParser }

@@ -4,13 +4,14 @@ local help = [[
 djot [opts] [file*]
 
 Options:
--m        Show matches.
--a        Show AST.
--j        Use JSON for -m or -a.
--p        Include source positions in AST.
--M        Show memory usage.
--v        Verbose (show warnings).
--h        Help.
+--matches        -m          Show matches.
+--ast            -a          Show AST.
+--json           -j          Use JSON for -m or -a.
+--sourcepos      -p          Include source positions in AST.
+--filter FILE    -f FILE     Filter AST using filter in FILE.
+--verbose        -v          Verbose (show warnings).
+--version                    Show version information.
+--help           -h          Help.
 ]]
 
 local function err(msg, code)
@@ -21,31 +22,57 @@ end
 local opts = {}
 local files = {}
 
-for _,arg in ipairs(arg) do
-  if string.find(arg, "^%-") then
-    string.gsub(arg, "(%a)", function(x)
-      if x == "m" then
-        opts.matches = true
-      elseif x == "a" then
-        opts.ast = true
-      elseif x == "j" then
-        opts.json = true
-      elseif x == "p" then
-        opts.sourcepos = true
-      elseif x == "v" then
-        opts.verbose = true
-      elseif x == "M" then
-        opts.memory = true
-      elseif x == "h" then
-        io.stdout:write(help)
-        os.exit(0)
-      else
-        err("Unknown option " .. x, 1)
-      end
-    end)
+local shortcuts =
+  { m = "--matches",
+    a = "--ast",
+    j = "--json",
+    p = "--sourcepos",
+    v = "--verbose",
+    f = "--filter",
+    h = "--help" }
+
+local argi = 1
+while arg[argi] do
+  local thisarg = arg[argi]
+  local longopts = {}
+  if string.find(thisarg, "^%-%-%a") then
+    longopts[#longopts + 1] = thisarg
+  elseif string.find(thisarg, "^%-%a") then
+    string.gsub(thisarg, "(%a)",
+      function(x)
+        longopts[#longopts + 1] = shortcuts[x] or ("-"..x)
+      end)
   else
-    files[#files + 1] = arg
+    files[#files + 1] = thisarg
   end
+  for _,x in ipairs(longopts) do
+    if x == "--matches" then
+      opts.matches = true
+    elseif x == "--ast" then
+      opts.ast = true
+    elseif x == "--json" then
+      opts.json = true
+    elseif x == "--sourcepos" then
+      opts.sourcepos = true
+    elseif x == "--verbose" then
+      opts.verbose = true
+    elseif x == "--filter" then
+      if arg[argi + 1] then
+        opts.filters = opts.filters or {}
+        table.insert(opts.filters, arg[argi + 1])
+        argi = argi + 1
+      end
+    elseif x == "--version" then
+      io.stdout:write("djot " .. djot.version .. "\n")
+      os.exit(0)
+    elseif x == "--help" then
+      io.stdout:write(help)
+      os.exit(0)
+    else
+      err("Unknown option " .. x, 1)
+    end
+  end
+  argi = argi + 1
 end
 
 local inp
@@ -64,43 +91,42 @@ else
   inp = table.concat(buff, "\n")
 end
 
-local warn
-if opts.verbose then
-  warn = function(warning)
+local warn = function(warning)
+  if opts.verbose then
     io.stderr:write(string.format("%s at byte position %d\n",
       warning.message, warning.pos))
-    end
+  end
 end
-
-local parser = djot.Parser:new(inp, opts, warn)
-
-local function memusage(location)
-  collectgarbage("collect")
-  io.stderr:write(string.format("Memory usage %-12s %6d KB\n",
-    location, math.floor(collectgarbage("count"))))
-end
-
-if opts.memory then
-  memusage("before parse")
-end
-
-parser:parse()
-
-if opts.memory then
-  memusage("after parse")
-end
-
 
 if opts.matches then
-  parser:render_matches(io.stdout, opts.json)
-elseif opts.ast then
-  parser:render_ast(io.stdout, opts.json)
-else
-  parser:render_html(io.stdout)
-end
 
-if opts.memory then
-  memusage("after render")
+  io.stdout:write(djot.parse_and_render_events(inp, warn))
+
+else
+
+  local ast = djot.parse(inp, opts.sourcepos, warn)
+
+  if opts.filters then
+    for _,fp in ipairs(opts.filters) do
+      local filt, err = djot.filter.require_filter(fp)
+      if filt then
+         djot.filter.apply_filter(ast, filt)
+      else
+        io.stderr:write("Error loading filter " .. fp .. ":\n" .. err .. "\n")
+      end
+    end
+  end
+
+  if opts.ast then
+    if opts.json then
+      io.stdout:write(djot.render_ast_json(ast))
+    else
+      io.stdout:write(djot.render_ast_pretty(ast))
+    end
+  else
+    io.stdout:write(djot.render_html(ast))
+  end
+
 end
 
 os.exit(0)

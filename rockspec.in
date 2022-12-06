@@ -17,23 +17,23 @@ description = {
    maintainer = "John MacFarlane <jgm@berkeley.edu>"
 }
 dependencies = {
-   "lua >= 5.1",
+   "lua >= 5.1"
 }
 test_dependencies = {
    "lua >= 5.1",
-   "luafilesystem >= 1.8"
 }
 build = {
    type = "builtin",
    modules = {
          ["djot"]                 = "djot.lua",
-         ["djot.match"]           = "djot/match.lua",
          ["djot.attributes"]      = "djot/attributes.lua",
          ["djot.inline"]          = "djot/inline.lua",
          ["djot.block"]           = "djot/block.lua",
          ["djot.ast"]             = "djot/ast.lua",
          ["djot.emoji"]           = "djot/emoji.lua",
          ["djot.html"]            = "djot/html.lua",
+         ["djot.filter"]          = "djot/filter.lua",
+         ["djot.json"]            = "djot/json.lua",
    },
    install = {
        bin = {

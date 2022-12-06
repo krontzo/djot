@@ -44,6 +44,10 @@ emphasis, while `_}` behaves like `_` but can *only* close emphasis:
     {_Emphasized_}
     _}not emphasized{_
 
+Explicitly marked closers can only match explicitly marked
+openers, and non-marked closers can only match non-marked
+openers (so, for example, `{_hi_`) doesn't produce emphasis).
+
 When there are multiple openers that might be matched with a
 given closer, the closest one is used.  For example:
 
@@ -378,9 +382,20 @@ the heading level.  The following text is parsed as inline content.
 ## A level _two_ heading!
 ```
 
-The heading text may spill over onto following lines.
+The heading text may spill over onto following lines, which may
+also be preceeded by the same number of `#` characters (but
+these can also be left off).
+
 The heading ends when a blank line (or the end of the document
 or enclosing container) is encountered.
+
+```
+# A heading that
+# takes up
+# three lines
+
+A paragraph, finally
+```
 
 ```
 # A heading that
@@ -388,14 +403,6 @@ takes up
 three lines
 
 A paragraph, finally.
-```
-
-Any number of trailing `#` characters may be included as
-a cosmetic decoration; they will not be included in the heading's
-content:
-
-```
-### Heading ###
 ```
 
 ### Block quote
@@ -602,7 +609,9 @@ The contents of a div are interpreted as block-level content.
 
 A pipe table consists of a sequence of *rows*. Each row starts and ends
 with a pipe character (`|`) and contains one or more *cells* separated
-by pipe characters.
+by pipe characters:
+
+    | 1 | 2 |
 
 A *separator line* is a row in which every cell consists of a sequence
 of one of more `-` characters, optional prefixed and/or suffixed by a
@@ -612,6 +621,11 @@ When a separator line is encountered, the previous row is treated as a
 header, and alignments on that row and any subsequent rows are
 determined by the separator line (until a new header is found). The
 separator line itself does not contribute a row to the parsed table.
+
+    | fruit  | price |
+    |--------|------:|
+    | apple  |     4 |
+    | banana |    10 |
 
 Column alignments are determined by the separator line in the following
 way:
@@ -752,3 +766,10 @@ See the [Epilogue][].
 
 # Epilogue
 ```
+
+## Nesting limits
+
+Conforming implementations can impose reasonable limits on
+nesting to avoid stack overflows or other issues.
+Few realistic documents will need more than, say, 12 levels
+of nesting, so a limit of 512 should be perfectly safe.

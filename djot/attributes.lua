@@ -1,8 +1,6 @@
 local find, sub = string.find, string.sub
-local match = require("djot.match")
-local make_match = match.make_match
 
--- parser for attributes
+-- Parser for attributes
 -- attributes { id = "foo", class = "bar baz",
 --              key1 = "val1", key2 = "val2" }
 -- syntax:
@@ -180,8 +178,6 @@ handlers[SCANNING_QUOTED_VALUE] = function(self, pos)
     return SCANNING
   elseif c == "\\" then
     return SCANNING_ESCAPED
-  elseif c == "{" or c == "}" then
-    return FAIL
   elseif c == "\n" then
     self:add_match(self.begin + 1, self.lastpos, "value")
     return SCANNING_QUOTED_VALUE
@@ -195,7 +191,6 @@ function AttributeParser:new(subject)
     subject = subject,
     state = START,
     begin = nil,
-    failed = nil,
     lastpos = nil,
     matches = {}
     }
@@ -205,7 +200,7 @@ function AttributeParser:new(subject)
 end
 
 function AttributeParser:add_match(sp, ep, tag)
-  self.matches[#self.matches + 1] = make_match(sp, ep, tag)
+  self.matches[#self.matches + 1] = {sp, ep, tag}
 end
 
 function AttributeParser:get_matches()
